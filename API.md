@@ -10,6 +10,11 @@
 - `login()`
 - `close()`
 
+### Config highlights (`DiscordClientConfig.Builder`)
+
+- `intents(int intents)`
+- `shard(int shardId, int shardCount)` for gateway sharding.
+
 ### Event handling
 
 - `on(String eventType, Consumer<JsonNode> listener)`
@@ -59,3 +64,10 @@
 
 - IDs and required string arguments must be non-blank.
 - `request(..., path, ...)` requires `path` to start with `/`.
+
+## `DiscordOAuthScopes`
+
+Helpers for OAuth scope composition:
+
+- `join(String... scopes)` for normalized, deduplicated scopes.
+- `defaultBotScopes()` for `bot` + `applications.commands`.

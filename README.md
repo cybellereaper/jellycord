@@ -35,6 +35,30 @@ try (DiscordClient client = DiscordClient.create(config)) {
 }
 ```
 
+## Sharding
+
+Configure shard routing when running multiple gateway workers:
+
+```java
+DiscordClientConfig config = DiscordClientConfig.builder(token)
+        .intents(GatewayIntent.combine(GatewayIntent.GUILDS, GatewayIntent.GUILD_MESSAGES))
+        .shard(1, 4) // shardId=1 out of 4 total shards
+        .build();
+```
+
+When `shardCount > 1`, Jellycord includes the Discord gateway `shard` tuple during identify.
+
+## OAuth Scopes (Java 25 API Surface)
+
+Use `DiscordOAuthScopes` to build deterministic scope strings:
+
+```java
+String scopes = DiscordOAuthScopes.join(
+        DiscordOAuthScopes.BOT,
+        DiscordOAuthScopes.APPLICATIONS_COMMANDS
+);
+```
+
 
 ## Modal Support
 
