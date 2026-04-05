@@ -27,7 +27,7 @@ public final class DiscordClient implements AutoCloseable {
         this.restClient = restClient;
         this.gatewayClient = gatewayClient;
         this.slashCommandRouter = new SlashCommandRouter(restClient::createInteractionResponse);
-        this.api = new DiscordApi(restClient);
+        this.api = new DiscordApi(restClient, stateCache);
         this.stateCache = stateCache;
         this.gatewayClient.on("INTERACTION_CREATE", slashCommandRouter::handleInteraction);
         registerCacheListeners();
@@ -242,8 +242,13 @@ public final class DiscordClient implements AutoCloseable {
         }
 
         gatewayClient.on("GUILD_CREATE", stateCache::putGuild);
+        gatewayClient.on("GUILD_UPDATE", stateCache::putGuild);
+        gatewayClient.on("GUILD_DELETE", payload -> stateCache.removeGuild(payload.path("id").asText("")));
+
         gatewayClient.on("CHANNEL_CREATE", stateCache::putChannel);
         gatewayClient.on("CHANNEL_UPDATE", stateCache::putChannel);
+        gatewayClient.on("CHANNEL_DELETE", payload -> stateCache.removeChannel(payload.path("id").asText("")));
+
         gatewayClient.on("GUILD_MEMBER_ADD", stateCache::putMember);
         gatewayClient.on("GUILD_MEMBER_UPDATE", stateCache::putMember);
         gatewayClient.on("GUILD_MEMBER_REMOVE", payload -> {
@@ -251,6 +256,21 @@ public final class DiscordClient implements AutoCloseable {
             String userId = payload.path("user").path("id").asText("");
             stateCache.removeMember(guildId, userId);
         });
+
+        gatewayClient.on("GUILD_ROLE_CREATE", payload -> stateCache.invalidateGuildRoles(payload.path("guild_id").asText("")));
+        gatewayClient.on("GUILD_ROLE_UPDATE", payload -> stateCache.invalidateGuildRoles(payload.path("guild_id").asText("")));
+        gatewayClient.on("GUILD_ROLE_DELETE", payload -> stateCache.invalidateGuildRoles(payload.path("guild_id").asText("")));
+
+        gatewayClient.on("GUILD_EMOJIS_UPDATE", payload -> stateCache.invalidateGuildEmojis(payload.path("guild_id").asText("")));
+        gatewayClient.on("WEBHOOKS_UPDATE", payload -> {
+            String guildId = payload.path("guild_id").asText("");
+            String channelId = payload.path("channel_id").asText("");
+            stateCache.invalidateGuildWebhooks(guildId);
+            stateCache.invalidateChannelWebhooks(channelId);
+        });
+        gatewayClient.on("GUILD_SCHEDULED_EVENT_CREATE", payload -> stateCache.invalidateScheduledEvents(payload.path("guild_id").asText("")));
+        gatewayClient.on("GUILD_SCHEDULED_EVENT_UPDATE", payload -> stateCache.invalidateScheduledEvents(payload.path("guild_id").asText("")));
+        gatewayClient.on("GUILD_SCHEDULED_EVENT_DELETE", payload -> stateCache.invalidateScheduledEvents(payload.path("guild_id").asText("")));
     }
 
     private String resolveApplicationId() {

@@ -30,4 +30,30 @@ class DiscordStateCacheTest {
         cache.removeMember("1", "99");
         assertFalse(cache.getMember("1", "99").isPresent());
     }
+
+    @Test
+    void supportsAdditionalGuildScopedCollectionCaches() throws Exception {
+        DiscordStateCache cache = new DiscordStateCache();
+
+        cache.putGuildRoles("1", objectMapper.readTree("[{\"id\":\"r1\"}]"));
+        cache.putGuildEmojis("1", objectMapper.readTree("[{\"id\":\"e1\"}]"));
+        cache.putGuildWebhooks("1", objectMapper.readTree("[{\"id\":\"w1\"}]"));
+        cache.putScheduledEvents("1", objectMapper.readTree("[{\"id\":\"s1\"}]"));
+        cache.putChannelWebhooks("2", objectMapper.readTree("[{\"id\":\"cw1\"}]"));
+
+        assertTrue(cache.getGuildRoles("1").isPresent());
+        assertTrue(cache.getGuildEmojis("1").isPresent());
+        assertTrue(cache.getGuildWebhooks("1").isPresent());
+        assertTrue(cache.getScheduledEvents("1").isPresent());
+        assertTrue(cache.getChannelWebhooks("2").isPresent());
+
+        cache.removeGuild("1");
+        cache.removeChannel("2");
+
+        assertFalse(cache.getGuildRoles("1").isPresent());
+        assertFalse(cache.getGuildEmojis("1").isPresent());
+        assertFalse(cache.getGuildWebhooks("1").isPresent());
+        assertFalse(cache.getScheduledEvents("1").isPresent());
+        assertFalse(cache.getChannelWebhooks("2").isPresent());
+    }
 }
