@@ -361,6 +361,49 @@ class SlashCommandRouterTest {
     }
 
     @Test
+    void typedParametersExposeResolvedEntitiesForIdBasedOptions() throws Exception {
+        JsonNode interaction = MAPPER.readTree("""
+                {
+                  "type": 2,
+                  "id": "123",
+                  "token": "abc",
+                  "data": {
+                    "type": 1,
+                    "name": "inspect",
+                    "options": [
+                      {"name": "target_user", "value": "u-1"},
+                      {"name": "target_channel", "value": "c-1"},
+                      {"name": "upload", "value": "a-1"}
+                    ],
+                    "resolved": {
+                      "users": {
+                        "u-1": {"id": "u-1", "username": "alice"}
+                      },
+                      "channels": {
+                        "c-1": {"id": "c-1", "name": "general"}
+                      },
+                      "attachments": {
+                        "a-1": {"id": "a-1", "filename": "report.txt"}
+                      }
+                    }
+                  }
+                }
+                """);
+
+        SlashCommandParameters parameters = new SlashCommandParameters(interaction);
+        InteractionContext context = new InteractionContext(interaction);
+
+        assertEquals("u-1", parameters.getId("target_user"));
+        assertEquals("alice", parameters.getResolvedUser("target_user").path("username").asText());
+        assertEquals("general", parameters.getResolvedChannel("target_channel").path("name").asText());
+        assertEquals("report.txt", parameters.getResolvedAttachment("upload").path("filename").asText());
+
+        assertEquals("alice", context.resolvedUser("u-1").path("username").asText());
+        assertEquals("general", context.resolvedChannel("c-1").path("name").asText());
+        assertEquals("report.txt", context.resolvedAttachment("a-1").path("filename").asText());
+    }
+
+    @Test
     void rejectsDuplicateHandlerRegistration() {
         SlashCommandRouter router = new SlashCommandRouter((id, token, type, data) -> {
         });

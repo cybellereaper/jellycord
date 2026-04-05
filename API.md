@@ -72,6 +72,23 @@ client.on("MESSAGE_DELETE", MessageDeleteEvent.class,
 - `getModalValue(ModalSubmitInteraction, String)` for typed modal extraction.
 - `getStringOption(SlashCommandInteraction, String)` for typed option extraction.
 
+`SlashCommandParameters` typed helpers:
+
+- `getString(String)`
+- `getLong(String)`
+- `getDouble(String)`
+- `getBoolean(String)`
+- `getId(String)` for user/channel/attachment/role/mentionable option ids
+- `getResolvedUser(String)`
+- `getResolvedChannel(String)`
+- `getResolvedAttachment(String)`
+
+`InteractionContext` resolved helpers:
+
+- `resolvedUser(String id)`
+- `resolvedChannel(String id)`
+- `resolvedAttachment(String id)`
+
 ### Typed interaction handler registration
 
 - `onSlashCommandContext(String, SlashCommandHandler)`

@@ -136,6 +136,17 @@ client.onSlashCommandContext("echo", interaction -> {
     );
 });
 
+client.onSlashCommandContext("inspect", interaction -> {
+    String targetUserId = interaction.parameters().getId("target_user");
+    JsonNode resolvedUser = interaction.parameters().getResolvedUser("target_user");
+
+    String username = resolvedUser == null ? "unknown" : resolvedUser.path("username").asText("unknown");
+    client.respondEphemeral(
+            interaction.context(),
+            "Inspecting user " + targetUserId + " (" + username + ")"
+    );
+});
+
 client.onAutocompleteContext("echo", interaction -> {
     String prefix = interaction.parameters().getString("text");
     String safePrefix = prefix == null ? "" : prefix.toLowerCase();

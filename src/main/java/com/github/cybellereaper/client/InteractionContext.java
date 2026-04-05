@@ -55,6 +55,18 @@ public record InteractionContext(JsonNode payload) {
         return payload;
     }
 
+    public JsonNode resolvedUser(String id) {
+        return resolvedEntity("users", id);
+    }
+
+    public JsonNode resolvedChannel(String id) {
+        return resolvedEntity("channels", id);
+    }
+
+    public JsonNode resolvedAttachment(String id) {
+        return resolvedEntity("attachments", id);
+    }
+
     private JsonNode resolveUserNode() {
         JsonNode memberUser = payload.path("member").path("user");
         return memberUser.isMissingNode() ? payload.path("user") : memberUser;
@@ -66,5 +78,22 @@ public record InteractionContext(JsonNode payload) {
         }
         String text = node.asText();
         return text.isBlank() ? null : text;
+    }
+
+    private JsonNode resolvedEntity(String collectionFieldName, String id) {
+        if (id == null || id.isBlank()) {
+            return null;
+        }
+
+        JsonNode resolvedCollection = payload.path("data").path("resolved").path(collectionFieldName);
+        if (!resolvedCollection.isObject()) {
+            return null;
+        }
+
+        JsonNode resolved = resolvedCollection.get(id);
+        if (resolved == null || resolved.isNull() || resolved.isMissingNode()) {
+            return null;
+        }
+        return resolved;
     }
 }
