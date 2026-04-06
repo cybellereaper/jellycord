@@ -43,6 +43,7 @@ sync.syncGlobal(discordClient);
 
 - `@Name`: explicit Discord option name
 - `@Optional`: marks parameter optional
+- `Optional<T>` (Java type): marks an option optional while still preserving the option type (`T`)
 - `@Default`: fallback value when option absent
 - parameter-level `@Autocomplete`: links autocomplete provider to option
 

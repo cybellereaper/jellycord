@@ -89,6 +89,38 @@ class CommandFrameworkExecutionTest {
         assertEquals("42", handler.lastMemberId);
     }
 
+    @Test
+    void resolvesJavaOptionalOptionValues() {
+        CommandFramework framework = new CommandFramework();
+        var handler = new OptionalCommand();
+        framework.registerCommands(handler);
+
+        framework.execute(new CommandInteraction(
+                "optional", CommandType.CHAT_INPUT, null, null,
+                Map.of("reason", new CommandOptionValue("Spam", 3)),
+                null, Map.of(), false, "g1", "u1", Set.of(), Set.of(),
+                null, null, null, null, null, null
+        ), response -> {});
+
+        assertEquals(java.util.Optional.of("Spam"), handler.lastReason);
+    }
+
+    @Test
+    void resolvesMissingJavaOptionalOptionAsEmpty() {
+        CommandFramework framework = new CommandFramework();
+        var handler = new OptionalCommand();
+        framework.registerCommands(handler);
+
+        framework.execute(new CommandInteraction(
+                "optional", CommandType.CHAT_INPUT, null, null,
+                Map.of(),
+                null, Map.of(), false, "g1", "u1", Set.of(), Set.of(),
+                null, null, null, null, null, null
+        ), response -> {});
+
+        assertEquals(java.util.Optional.empty(), handler.lastReason);
+    }
+
     @Command("greet")
     static final class GreetingCommand {
         private String lastName;
@@ -124,6 +156,16 @@ class CommandFrameworkExecutionTest {
                   @Name("target") com.github.cybellereaper.client.ResolvedMember member) {
             lastUser = user == null ? null : user.username();
             lastMemberId = member == null ? null : member.userId();
+        }
+    }
+
+    @Command("optional")
+    static final class OptionalCommand {
+        private java.util.Optional<String> lastReason = java.util.Optional.empty();
+
+        @Execute
+        void root(@Name("reason") java.util.Optional<String> reason) {
+            lastReason = reason;
         }
     }
 

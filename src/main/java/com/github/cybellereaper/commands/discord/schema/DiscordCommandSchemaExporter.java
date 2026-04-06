@@ -70,7 +70,7 @@ public final class DiscordCommandSchemaExporter {
     }
 
     private int mapOptionType(CommandParameter parameter) {
-        Class<?> type = parameter.reflectedParameter().getType();
+        Class<?> type = parameter.optionType();
         if (type == String.class || type.isEnum()) {
             return SlashCommandOptionDefinition.STRING;
         }
