@@ -28,7 +28,9 @@ public final class CommandParser {
         List<CommandHandler> handlers = new ArrayList<>();
         List<AutocompleteHandler> autocompleteHandlers = new ArrayList<>();
 
-        for (Method method : type.getDeclaredMethods()) {
+        Method[] declaredMethods = type.getDeclaredMethods();
+        java.util.Arrays.sort(declaredMethods, java.util.Comparator.comparing(Method::getName));
+        for (Method method : declaredMethods) {
             if (method.isAnnotationPresent(Autocomplete.class)) {
                 autocompleteHandlers.add(parseAutocomplete(instance, command, method));
                 continue;

@@ -196,4 +196,63 @@ public final class DiscordInteractionMapper {
             return null;
         }
     }
+
+
+    public com.github.cybellereaper.commands.core.model.InteractionExecution toComponentInteraction(JsonNode interaction, InteractionContext context, com.github.cybellereaper.commands.core.model.InteractionHandlerType type) {
+        Objects.requireNonNull(type, "type");
+        return new com.github.cybellereaper.commands.core.model.InteractionExecution(
+                type,
+                textOrNull(interaction.path("data").path("custom_id")),
+                Map.of(),
+                interaction,
+                context.guildId() == null,
+                context.guildId(),
+                context.userId(),
+                Set.of(),
+                Set.of(),
+                extractStatePayload(textOrNull(interaction.path("data").path("custom_id")))
+        );
+    }
+
+    public com.github.cybellereaper.commands.core.model.InteractionExecution toModalInteraction(JsonNode interaction, InteractionContext context) {
+        Map<String, String> fields = new HashMap<>();
+        JsonNode rows = interaction.path("data").path("components");
+        if (rows.isArray()) {
+            for (JsonNode row : rows) {
+                JsonNode components = row.path("components");
+                if (!components.isArray()) continue;
+                for (JsonNode component : components) {
+                    String id = textOrNull(component.path("custom_id"));
+                    String value = textOrNull(component.path("value"));
+                    if (id != null && value != null) {
+                        fields.put(id, value);
+                    }
+                }
+            }
+        }
+
+        String customId = textOrNull(interaction.path("data").path("custom_id"));
+        return new com.github.cybellereaper.commands.core.model.InteractionExecution(
+                com.github.cybellereaper.commands.core.model.InteractionHandlerType.MODAL,
+                customId,
+                fields,
+                interaction,
+                context.guildId() == null,
+                context.guildId(),
+                context.userId(),
+                Set.of(),
+                Set.of(),
+                extractStatePayload(customId)
+        );
+    }
+
+    private static String extractStatePayload(String customId) {
+        if (customId == null) return null;
+        int index = customId.indexOf('|');
+        if (index < 0 || index + 1 >= customId.length()) {
+            return null;
+        }
+        return customId.substring(index + 1);
+    }
+
 }

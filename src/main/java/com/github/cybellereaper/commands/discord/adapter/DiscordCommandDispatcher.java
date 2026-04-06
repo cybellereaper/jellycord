@@ -8,6 +8,7 @@ import com.github.cybellereaper.commands.core.execute.CommandResponder;
 import com.github.cybellereaper.commands.discord.response.DiscordResponseApplier;
 
 import java.util.List;
+import com.github.cybellereaper.commands.core.model.InteractionHandlerType;
 
 public final class DiscordCommandDispatcher {
     private static final String GENERIC_ERROR_MESSAGE = "Sorry, something went wrong while executing this command.";
@@ -50,6 +51,70 @@ public final class DiscordCommandDispatcher {
             interactionContext.respondWithAutocompleteChoices(choices);
         } catch (RuntimeException exception) {
             interactionContext.respondWithAutocompleteChoices(List.of());
+            throw exception;
+        }
+    }
+
+
+
+    public void dispatchButton(JsonNode interaction, InteractionContext interactionContext) {
+        dispatchComponent(interaction, interactionContext, InteractionHandlerType.BUTTON);
+    }
+
+    public void dispatchStringSelect(JsonNode interaction, InteractionContext interactionContext) {
+        dispatchComponent(interaction, interactionContext, InteractionHandlerType.STRING_SELECT);
+    }
+
+    public void dispatchUserSelect(JsonNode interaction, InteractionContext interactionContext) {
+        dispatchComponent(interaction, interactionContext, InteractionHandlerType.USER_SELECT);
+    }
+
+    public void dispatchRoleSelect(JsonNode interaction, InteractionContext interactionContext) {
+        dispatchComponent(interaction, interactionContext, InteractionHandlerType.ROLE_SELECT);
+    }
+
+    public void dispatchMentionableSelect(JsonNode interaction, InteractionContext interactionContext) {
+        dispatchComponent(interaction, interactionContext, InteractionHandlerType.MENTIONABLE_SELECT);
+    }
+
+    public void dispatchChannelSelect(JsonNode interaction, InteractionContext interactionContext) {
+        dispatchComponent(interaction, interactionContext, InteractionHandlerType.CHANNEL_SELECT);
+    }
+
+    public void dispatchModal(JsonNode interaction, InteractionContext interactionContext) {
+        java.util.Objects.requireNonNull(interaction, "interaction");
+        java.util.Objects.requireNonNull(interactionContext, "interactionContext");
+        var coreInteraction = mapper.toModalInteraction(interaction, interactionContext);
+        var trackingResponder = new TrackingResponder(new DiscordResponseApplier(interactionContext));
+
+        try {
+            framework.executeInteraction(coreInteraction, trackingResponder);
+            if (!trackingResponder.responded()) {
+                interactionContext.respondEphemeral(NO_RESPONSE_MESSAGE);
+            }
+        } catch (RuntimeException exception) {
+            if (!trackingResponder.responded()) {
+                interactionContext.respondEphemeral(GENERIC_ERROR_MESSAGE);
+            }
+            throw exception;
+        }
+    }
+
+    private void dispatchComponent(JsonNode interaction, InteractionContext interactionContext, InteractionHandlerType type) {
+        java.util.Objects.requireNonNull(interaction, "interaction");
+        java.util.Objects.requireNonNull(interactionContext, "interactionContext");
+        var coreInteraction = mapper.toComponentInteraction(interaction, interactionContext, type);
+        var trackingResponder = new TrackingResponder(new DiscordResponseApplier(interactionContext));
+
+        try {
+            framework.executeInteraction(coreInteraction, trackingResponder);
+            if (!trackingResponder.responded()) {
+                interactionContext.respondEphemeral(NO_RESPONSE_MESSAGE);
+            }
+        } catch (RuntimeException exception) {
+            if (!trackingResponder.responded()) {
+                interactionContext.respondEphemeral(GENERIC_ERROR_MESSAGE);
+            }
             throw exception;
         }
     }
