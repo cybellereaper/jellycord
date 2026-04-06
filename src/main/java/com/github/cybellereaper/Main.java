@@ -8,6 +8,7 @@ import com.github.cybellereaper.events.core.bus.EventFramework;
 import com.github.cybellereaper.examples.commands.ExampleCommandBootstrap;
 import com.github.cybellereaper.examples.events.ExampleEventBootstrap;
 import com.github.cybellereaper.examples.interactions.ExampleInteractionBootstrap;
+import com.github.cybellereaper.examples.interactions.InteractionRouterExamples;
 import com.github.cybellereaper.gateway.GatewayIntent;
 import com.github.cybellereaper.interactions.core.execute.InteractionFramework;
 
@@ -37,18 +38,21 @@ void main() throws Exception {
     DiscordCommandDispatcher dispatcher = new DiscordCommandDispatcher(commandFramework);
 
     try (DiscordClient client = DiscordClient.create(config)) {
+        InteractionRouterExamples.register(client);
+
         DiscordCommandSyncService syncService = new DiscordCommandSyncService(commandFramework);
         if (guildId == null || guildId.isBlank()) {
             syncService.syncGlobal(client);
+            client.registerGlobalSlashCommand("ticket", "Open ticket modal example");
         } else {
             syncService.syncGuild(client, guildId);
+            client.registerGuildSlashCommand(guildId, "ticket", "Open ticket modal example");
         }
 
         // Existing command framework adapter wiring.
         DiscordFrameworkBinder.bind(client, commandFramework, dispatcher);
 
         // Interaction/event frameworks are initialized and available for transport adapters.
-        // Current transport glue lives in interaction-discord/event-discord modules.
         if (!eventFramework.intentDiagnostics().isEmpty()) {
             System.err.println("Event listeners registered with missing intents: " + eventFramework.intentDiagnostics());
         }
