@@ -7,11 +7,14 @@ import com.github.cybellereaper.commands.core.model.*;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Optional;
 
 public final class CommandParser {
     public CommandDefinition parse(Object instance) {
@@ -103,9 +106,13 @@ public final class CommandParser {
     }
 
     private CommandParameter parseParameter(int index, Parameter parameter) {
-        ParameterKind kind = determineKind(parameter.getType());
+        boolean wrappedOptional = parameter.getType() == Optional.class;
+        Class<?> optionType = wrappedOptional ? extractOptionalType(parameter) : parameter.getType();
+        ParameterKind kind = determineKind(optionType);
         String optionName = extractOptionName(parameter);
-        boolean required = !(parameter.isAnnotationPresent(Optional.class) || parameter.isAnnotationPresent(Default.class));
+        boolean required = !(wrappedOptional
+                || parameter.isAnnotationPresent(com.github.cybellereaper.commands.core.annotation.Optional.class)
+                || parameter.isAnnotationPresent(Default.class));
         String defaultValue = parameter.isAnnotationPresent(Default.class) ? parameter.getAnnotation(Default.class).value() : null;
         String autocompleteId = parameter.isAnnotationPresent(Autocomplete.class) ? parameter.getAnnotation(Autocomplete.class).value() : null;
 
@@ -113,7 +120,19 @@ public final class CommandParser {
             throw new RegistrationException("@Optional/@Default are only valid for option parameters: " + parameter);
         }
 
-        return new CommandParameter(index, parameter, optionName, extractDescription(parameter), kind, required, defaultValue, autocompleteId);
+        return new CommandParameter(index, parameter, optionType, optionName, extractDescription(parameter), kind, required, defaultValue, autocompleteId, wrappedOptional);
+    }
+
+    private static Class<?> extractOptionalType(Parameter parameter) {
+        Type parameterizedType = parameter.getParameterizedType();
+        if (!(parameterizedType instanceof ParameterizedType typed)) {
+            throw new RegistrationException("Optional parameter must declare a generic type: " + parameter);
+        }
+        Type[] arguments = typed.getActualTypeArguments();
+        if (arguments.length != 1 || !(arguments[0] instanceof Class<?> argumentType)) {
+            throw new RegistrationException("Optional parameter must use a concrete generic type: " + parameter);
+        }
+        return argumentType;
     }
 
     private static ParameterKind determineKind(Class<?> type) {

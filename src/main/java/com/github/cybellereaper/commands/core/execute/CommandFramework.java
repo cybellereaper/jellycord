@@ -17,6 +17,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 public final class CommandFramework {
     private final CommandRegistry commandRegistry = new CommandRegistry();
@@ -162,7 +163,7 @@ public final class CommandFramework {
 
     @SuppressWarnings({"rawtypes", "unchecked"})
     private Object resolveParameter(CommandContext context, CommandParameter parameter) {
-        Class<?> type = parameter.reflectedParameter().getType();
+        Class<?> type = parameter.optionType();
         CommandInteraction interaction = context.interaction();
 
         return switch (parameter.kind()) {
@@ -185,9 +186,13 @@ public final class CommandFramework {
         CommandOptionValue option = interaction.options().get(parameter.optionName());
         if (option == null || option.value() == null) {
             if (parameter.defaultValue() != null) {
-                return convertString(parameter.defaultValue(), type, parameter);
+                Object fallbackValue = convertString(parameter.defaultValue(), type, parameter);
+                return parameter.wrappedOptional() ? Optional.of(fallbackValue) : fallbackValue;
             }
             if (!parameter.required()) {
+                if (parameter.wrappedOptional()) {
+                    return Optional.empty();
+                }
                 if (type.isPrimitive()) {
                     return primitiveDefault(type);
                 }
@@ -197,25 +202,32 @@ public final class CommandFramework {
         }
 
         Object rawValue = option.value();
+        Object resolvedValue;
         if (type.isInstance(rawValue)) {
-            return rawValue;
+            resolvedValue = rawValue;
+            return parameter.wrappedOptional() ? Optional.of(resolvedValue) : resolvedValue;
         }
         if (rawValue instanceof String textValue) {
-            return convertString(textValue, type, parameter);
+            resolvedValue = convertString(textValue, type, parameter);
+            return parameter.wrappedOptional() ? Optional.of(resolvedValue) : resolvedValue;
         }
         if (rawValue instanceof Number number) {
             if (type == int.class || type == Integer.class) {
-                return number.intValue();
+                resolvedValue = number.intValue();
+                return parameter.wrappedOptional() ? Optional.of(resolvedValue) : resolvedValue;
             }
             if (type == long.class || type == Long.class) {
-                return number.longValue();
+                resolvedValue = number.longValue();
+                return parameter.wrappedOptional() ? Optional.of(resolvedValue) : resolvedValue;
             }
             if (type == double.class || type == Double.class) {
-                return number.doubleValue();
+                resolvedValue = number.doubleValue();
+                return parameter.wrappedOptional() ? Optional.of(resolvedValue) : resolvedValue;
             }
         }
         if (rawValue instanceof Boolean booleanValue && (type == boolean.class || type == Boolean.class)) {
-            return booleanValue;
+            resolvedValue = booleanValue;
+            return parameter.wrappedOptional() ? Optional.of(resolvedValue) : resolvedValue;
         }
         throw new ResolutionException("Invalid option type for '" + parameter.optionName() + "'. Expected " + type.getSimpleName());
     }

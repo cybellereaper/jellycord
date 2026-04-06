@@ -7,6 +7,8 @@ import com.github.cybellereaper.commands.core.model.CommandType;
 import com.github.cybellereaper.commands.core.parser.CommandParser;
 import org.junit.jupiter.api.Test;
 
+import java.util.Optional;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class CommandParserTest {
@@ -25,6 +27,16 @@ class CommandParserTest {
     @Test
     void rejectsDuplicateSubcommandRoutes() {
         assertThrows(RegistrationException.class, () -> parser.parse(new DuplicateRoutes()));
+    }
+
+    @Test
+    void treatsJavaOptionalAsOptionalOption() {
+        CommandDefinition definition = parser.parse(new OptionalCommand());
+        var parameter = definition.handlers().getFirst().parameters().getFirst();
+
+        assertFalse(parameter.required());
+        assertEquals("reason", parameter.optionName());
+        assertEquals(String.class, parameter.optionType());
     }
 
     @Command("admin")
@@ -47,5 +59,11 @@ class CommandParserTest {
 
         @Subcommand("ping")
         void b() {}
+    }
+
+    @Command("optional")
+    static final class OptionalCommand {
+        @Execute
+        void root(@Name("reason") Optional<String> reason) {}
     }
 }

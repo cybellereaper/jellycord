@@ -12,7 +12,10 @@ import com.github.cybellereaper.commands.core.parser.CommandParser;
 import com.github.cybellereaper.commands.discord.schema.DiscordCommandSchemaExporter;
 import org.junit.jupiter.api.Test;
 
+import java.util.Optional;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class DiscordSchemaExporterTest {
     @Test
@@ -28,6 +31,18 @@ class DiscordSchemaExporterTest {
         assertEquals(SlashCommandDefinition.USER, user.type());
     }
 
+    @Test
+    void exportsJavaOptionalAsNonRequiredOption() {
+        CommandParser parser = new CommandParser();
+        DiscordCommandSchemaExporter exporter = new DiscordCommandSchemaExporter();
+
+        SlashCommandDefinition slash = exporter.exportDefinition(parser.parse(new OptionalCommand()));
+        SlashCommandOptionDefinition option = slash.options().getFirst();
+        assertEquals("reason", option.name());
+        assertEquals(SlashCommandOptionDefinition.STRING, option.type());
+        assertFalse(option.required());
+    }
+
     @Command("mod")
     @Description("moderation")
     static final class SubcommandCommand {
@@ -41,5 +56,11 @@ class DiscordSchemaExporterTest {
         @Execute
         void root() {
         }
+    }
+
+    @Command("optional")
+    static final class OptionalCommand {
+        @Execute
+        void root(@Name("reason") Optional<String> reason) {}
     }
 }
