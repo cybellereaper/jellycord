@@ -6,26 +6,33 @@ import com.github.cybellereaper.commands.core.exception.CheckFailedException;
 import com.github.cybellereaper.commands.core.exception.CommandNotFoundException;
 import com.github.cybellereaper.commands.core.exception.RegistrationException;
 import com.github.cybellereaper.commands.core.exception.ResolutionException;
+import com.github.cybellereaper.commands.core.interaction.context.ComponentContext;
+import com.github.cybellereaper.commands.core.interaction.context.InteractionContext;
+import com.github.cybellereaper.commands.core.interaction.context.ModalContext;
+import com.github.cybellereaper.commands.core.interaction.context.SelectContext;
 import com.github.cybellereaper.commands.core.model.*;
 import com.github.cybellereaper.commands.core.parser.CommandParser;
+import com.github.cybellereaper.commands.core.parser.InteractionModuleParser;
 import com.github.cybellereaper.commands.core.registry.CommandRegistry;
+import com.github.cybellereaper.commands.core.registry.InteractionHandlerRegistry;
 import com.github.cybellereaper.commands.core.resolve.ParameterResolver;
 import com.github.cybellereaper.commands.core.resolve.ResolverRegistry;
 import com.github.cybellereaper.commands.core.response.CommandResponse;
+import com.github.cybellereaper.commands.core.response.ImmediateResponse;
+import com.github.cybellereaper.commands.core.response.InteractionReply;
 
 import java.lang.reflect.InvocationTargetException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.*;
 
 public final class CommandFramework {
     private final CommandRegistry commandRegistry = new CommandRegistry();
+    private final InteractionHandlerRegistry interactionRegistry = new InteractionHandlerRegistry();
     private final ResolverRegistry resolverRegistry = new ResolverRegistry();
     private final CheckRegistry checkRegistry = new CheckRegistry();
     private final AutocompleteRegistry autocompleteRegistry = new AutocompleteRegistry();
     private final CooldownManager cooldownManager = new CooldownManager();
     private final CommandParser commandParser = new CommandParser();
+    private final InteractionModuleParser interactionParser = new InteractionModuleParser();
     private CommandExceptionHandler exceptionHandler = CommandExceptionHandler.rethrowing();
 
     public void registerCommands(Object... handlers) {
@@ -34,6 +41,23 @@ public final class CommandFramework {
             validateChecks(parsed);
             commandRegistry.register(parsed);
         }
+    }
+
+    public void registerModules(Object... handlers) {
+        for (Object handler : handlers) {
+            registerModule(handler);
+        }
+    }
+
+    private void registerModule(Object handler) {
+        try {
+            registerCommands(handler);
+        } catch (RegistrationException ignored) {
+            // module may be component/modal only.
+        }
+        List<InteractionHandler> parsedHandlers = interactionParser.parse(handler);
+        parsedHandlers.forEach(this::validateChecks);
+        parsedHandlers.forEach(interactionRegistry::register);
     }
 
     public <T> void registerResolver(Class<T> type, ParameterResolver<? extends T> resolver) {
@@ -59,9 +83,7 @@ public final class CommandFramework {
                 .orElseThrow(() -> new CommandNotFoundException("Unknown command: " + interaction.commandName()));
 
         String option = interaction.focusedOption();
-        if (option == null) {
-            return List.of();
-        }
+        if (option == null) return List.of();
 
         CommandContext context = new CommandContext(interaction, responder);
         for (AutocompleteHandler handler : definition.autocompleteHandlers()) {
@@ -102,16 +124,53 @@ public final class CommandFramework {
 
             Object[] args = resolveParameters(context, handler);
             Object result = handler.method().invoke(handler.instance(), args);
-            if (result instanceof CommandResponse response) {
-                responder.accept(response);
-            }
+            applyResult(responder, result);
         } catch (Throwable throwable) {
             exceptionHandler.onException(context, unwrap(throwable));
         }
     }
 
-    public CommandRegistry registry() {
-        return commandRegistry;
+    public void executeInteraction(InteractionExecution interaction, CommandResponder responder) {
+        Objects.requireNonNull(interaction, "interaction");
+        Objects.requireNonNull(responder, "responder");
+
+        try {
+            InteractionHandlerRegistry.ResolvedInteractionHandler resolved = interactionRegistry.find(interaction.type(), interaction.customId())
+                    .orElseThrow(() -> new CommandNotFoundException("Unknown interaction route: " + interaction.type() + " " + interaction.customId()));
+            InteractionHandler handler = resolved.handler();
+
+            InteractionContext context = switch (interaction.type()) {
+                case BUTTON -> new ComponentContext(interaction, responder, resolved.routeMatch().pathParams());
+                case MODAL -> new ModalContext(interaction, responder, resolved.routeMatch().pathParams());
+                default -> new SelectContext(interaction, responder, resolved.routeMatch().pathParams());
+            };
+
+            enforceGuards(context, handler);
+            cooldownManager.enforce("interaction:" + handler.type() + ":" + handler.route(), handler.cooldown(),
+                    new CommandInteraction("interaction", CommandType.CHAT_INPUT, null, null, Map.of(), null, interaction.rawInteraction(), interaction.dm(),
+                            interaction.guildId(), interaction.userId(), interaction.userPermissions(), interaction.botPermissions(), null, null, null, null, null, null));
+
+            Object[] args = resolveInteractionParameters(context, handler);
+            Object result = handler.method().invoke(handler.instance(), args);
+            Object normalized = (result == null && handler.deferReply()) ? InteractionReply.deferReply().ephemeral(handler.ephemeralDefault()).build()
+                    : (result == null && handler.deferUpdate()) ? InteractionReply.deferUpdate().build() : result;
+            applyResult(responder, normalized);
+        } catch (Throwable throwable) {
+            exceptionHandler.onException(new CommandContext(new CommandInteraction("interaction", CommandType.CHAT_INPUT, null, null,
+                    Map.of(), null, interaction.rawInteraction(), interaction.dm(), interaction.guildId(), interaction.userId(),
+                    interaction.userPermissions(), interaction.botPermissions(), null, null, null, null, null, null), responder), unwrap(throwable));
+        }
+    }
+
+    public CommandRegistry registry() { return commandRegistry; }
+    public InteractionHandlerRegistry interactionRegistry() { return interactionRegistry; }
+
+    private static void applyResult(CommandResponder responder, Object result) {
+        if (result instanceof CommandResponse response) {
+            responder.accept(response);
+        } else if (result instanceof String content) {
+            responder.accept(ImmediateResponse.publicMessage(content));
+        }
     }
 
     private static Throwable unwrap(Throwable throwable) {
@@ -122,12 +181,8 @@ public final class CommandFramework {
     }
 
     private void enforceGuards(CommandContext context, CommandDefinition definition, CommandHandler handler) {
-        if (definition.guildOnly() && context.interaction().dm()) {
-            throw new CheckFailedException("Command is guild-only");
-        }
-        if (definition.dmOnly() && !context.interaction().dm()) {
-            throw new CheckFailedException("Command is DM-only");
-        }
+        if (definition.guildOnly() && context.interaction().dm()) throw new CheckFailedException("Command is guild-only");
+        if (definition.dmOnly() && !context.interaction().dm()) throw new CheckFailedException("Command is DM-only");
 
         List<String> userPermissions = new ArrayList<>(definition.requiredUserPermissions());
         userPermissions.addAll(handler.requiredUserPermissions());
@@ -143,13 +198,32 @@ public final class CommandFramework {
 
         List<String> checks = new ArrayList<>(definition.checks());
         checks.addAll(handler.checks());
+        runChecks(context, checks);
+    }
+
+    private void enforceGuards(InteractionContext context, InteractionHandler handler) {
+        InteractionExecution interaction = context.interaction();
+        InteractionSource source = interaction.dm() ? InteractionSource.DM : InteractionSource.GUILD;
+        if (!handler.allowedSources().contains(source)) {
+            throw new CheckFailedException("Interaction source not allowed: " + source);
+        }
+        if (!interaction.userPermissions().containsAll(handler.requiredUserPermissions())) {
+            throw new CheckFailedException("Missing user permissions: " + handler.requiredUserPermissions());
+        }
+        if (!interaction.botPermissions().containsAll(handler.requiredBotPermissions())) {
+            throw new CheckFailedException("Missing bot permissions: " + handler.requiredBotPermissions());
+        }
+        runChecks(new CommandContext(new CommandInteraction("interaction", CommandType.CHAT_INPUT, null, null, Map.of(), null,
+                interaction.rawInteraction(), interaction.dm(), interaction.guildId(), interaction.userId(), interaction.userPermissions(),
+                interaction.botPermissions(), null, null, null, null, null, null), response -> {}), handler.checks());
+    }
+
+    private void runChecks(CommandContext context, List<String> checks) {
         for (String checkId : checks) {
             boolean result = checkRegistry.find(checkId)
                     .orElseThrow(() -> new RegistrationException("Unknown check id '" + checkId + "'"))
                     .test(context);
-            if (!result) {
-                throw new CheckFailedException("Check failed: " + checkId);
-            }
+            if (!result) throw new CheckFailedException("Check failed: " + checkId);
         }
     }
 
@@ -159,6 +233,23 @@ public final class CommandFramework {
             args[parameter.index()] = resolveParameter(context, parameter);
         }
         return args;
+    }
+
+    private Object[] resolveInteractionParameters(InteractionContext context, InteractionHandler handler) {
+        Object[] args = new Object[handler.parameters().size()];
+        for (InteractionParameter parameter : handler.parameters()) {
+            args[parameter.index()] = resolveInteractionParameter(context, parameter);
+        }
+        return args;
+    }
+
+    private Object resolveInteractionParameter(InteractionContext context, InteractionParameter parameter) {
+        return switch (parameter.kind()) {
+            case CONTEXT -> context;
+            case PATH_PARAM -> convert(parameter.type(), context.pathParam(parameter.key()), parameter.key(), parameter.required(), parameter.wrappedOptional());
+            case FIELD -> convert(parameter.type(), context.interaction().modalFields().get(parameter.key()), parameter.key(), parameter.required(), parameter.wrappedOptional());
+            case COMPONENT_STATE -> convert(parameter.type(), context.interaction().statePayload(), "state", parameter.required(), parameter.wrappedOptional());
+        };
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
@@ -186,103 +277,77 @@ public final class CommandFramework {
         CommandOptionValue option = interaction.options().get(parameter.optionName());
         if (option == null || option.value() == null) {
             if (parameter.defaultValue() != null) {
-                Object fallbackValue = convertString(parameter.defaultValue(), type, parameter);
+                Object fallbackValue = convertString(parameter.defaultValue(), type, parameter.optionName());
                 return parameter.wrappedOptional() ? Optional.of(fallbackValue) : fallbackValue;
             }
             if (!parameter.required()) {
-                if (parameter.wrappedOptional()) {
-                    return Optional.empty();
-                }
-                if (type.isPrimitive()) {
-                    return primitiveDefault(type);
-                }
+                if (parameter.wrappedOptional()) return Optional.empty();
+                if (type.isPrimitive()) return primitiveDefault(type);
                 return null;
             }
             throw new ResolutionException("Missing required option: " + parameter.optionName());
         }
 
         Object rawValue = option.value();
-        Object resolvedValue;
-        if (type.isInstance(rawValue)) {
-            resolvedValue = rawValue;
-            return parameter.wrappedOptional() ? Optional.of(resolvedValue) : resolvedValue;
-        }
+        if (type.isInstance(rawValue)) return parameter.wrappedOptional() ? Optional.of(rawValue) : rawValue;
         if (rawValue instanceof String textValue) {
-            resolvedValue = convertString(textValue, type, parameter);
+            Object resolvedValue = convertString(textValue, type, parameter.optionName());
             return parameter.wrappedOptional() ? Optional.of(resolvedValue) : resolvedValue;
         }
         if (rawValue instanceof Number number) {
-            if (type == int.class || type == Integer.class) {
-                resolvedValue = number.intValue();
-                return parameter.wrappedOptional() ? Optional.of(resolvedValue) : resolvedValue;
-            }
-            if (type == long.class || type == Long.class) {
-                resolvedValue = number.longValue();
-                return parameter.wrappedOptional() ? Optional.of(resolvedValue) : resolvedValue;
-            }
-            if (type == double.class || type == Double.class) {
-                resolvedValue = number.doubleValue();
-                return parameter.wrappedOptional() ? Optional.of(resolvedValue) : resolvedValue;
-            }
+            if (type == int.class || type == Integer.class) return wrapOptional(parameter, number.intValue());
+            if (type == long.class || type == Long.class) return wrapOptional(parameter, number.longValue());
+            if (type == double.class || type == Double.class) return wrapOptional(parameter, number.doubleValue());
         }
-        if (rawValue instanceof Boolean booleanValue && (type == boolean.class || type == Boolean.class)) {
-            resolvedValue = booleanValue;
-            return parameter.wrappedOptional() ? Optional.of(resolvedValue) : resolvedValue;
-        }
+        if (rawValue instanceof Boolean booleanValue && (type == boolean.class || type == Boolean.class)) return wrapOptional(parameter, booleanValue);
         throw new ResolutionException("Invalid option type for '" + parameter.optionName() + "'. Expected " + type.getSimpleName());
     }
 
+    private static Object wrapOptional(CommandParameter parameter, Object value) {
+        return parameter.wrappedOptional() ? Optional.of(value) : value;
+    }
 
-    private static Object resolveEntityParameter(Object contextTarget, java.util.Map<String, Object> optionTargets, String optionName) {
-        if (contextTarget != null) {
-            return contextTarget;
+    private static Object convert(Class<?> type, String raw, String field, boolean required, boolean wrappedOptional) {
+        if (raw == null) {
+            if (!required) {
+                if (wrappedOptional) return Optional.empty();
+                return type.isPrimitive() ? primitiveDefault(type) : null;
+            }
+            throw new ResolutionException("Missing required value: " + field);
         }
-        if (optionName == null) {
-            return null;
-        }
+        Object converted = convertString(raw, type, field);
+        return wrappedOptional ? Optional.of(converted) : converted;
+    }
+
+    private static Object resolveEntityParameter(Object contextTarget, Map<String, Object> optionTargets, String optionName) {
+        if (contextTarget != null) return contextTarget;
+        if (optionName == null) return null;
         return optionTargets.get(optionName);
     }
-    private static Object convertString(String value, Class<?> type, CommandParameter parameter) {
+
+    private static Object convertString(String value, Class<?> type, String fieldName) {
         try {
-            if (type == String.class) {
-                return value;
-            }
-            if (type == int.class || type == Integer.class) {
-                return Integer.parseInt(value);
-            }
-            if (type == long.class || type == Long.class) {
-                return Long.parseLong(value);
-            }
-            if (type == double.class || type == Double.class) {
-                return Double.parseDouble(value);
-            }
-            if (type == boolean.class || type == Boolean.class) {
-                return Boolean.parseBoolean(value);
-            }
+            if (type == String.class) return value;
+            if (type == int.class || type == Integer.class) return Integer.parseInt(value);
+            if (type == long.class || type == Long.class) return Long.parseLong(value);
+            if (type == double.class || type == Double.class) return Double.parseDouble(value);
+            if (type == boolean.class || type == Boolean.class) return Boolean.parseBoolean(value);
             if (type.isEnum()) {
                 @SuppressWarnings({"rawtypes", "unchecked"})
                 Object enumValue = Enum.valueOf((Class<? extends Enum>) type, value.toUpperCase());
                 return enumValue;
             }
         } catch (Exception exception) {
-            throw new ResolutionException("Failed to convert option '" + parameter.optionName() + "' value: " + value, exception);
+            throw new ResolutionException("Failed to convert value '" + fieldName + "': " + value, exception);
         }
         throw new ResolutionException("Unsupported option type: " + type.getName());
     }
 
     private static Object primitiveDefault(Class<?> primitiveType) {
-        if (primitiveType == boolean.class) {
-            return false;
-        }
-        if (primitiveType == int.class) {
-            return 0;
-        }
-        if (primitiveType == long.class) {
-            return 0L;
-        }
-        if (primitiveType == double.class) {
-            return 0D;
-        }
+        if (primitiveType == boolean.class) return false;
+        if (primitiveType == int.class) return 0;
+        if (primitiveType == long.class) return 0L;
+        if (primitiveType == double.class) return 0D;
         return null;
     }
 
@@ -290,6 +355,14 @@ public final class CommandFramework {
         List<String> checks = new ArrayList<>(definition.checks());
         definition.handlers().forEach(handler -> checks.addAll(handler.checks()));
         for (String check : checks) {
+            if (checkRegistry.find(check).isEmpty()) {
+                throw new RegistrationException("Check '" + check + "' was referenced but is not registered");
+            }
+        }
+    }
+
+    private void validateChecks(InteractionHandler handler) {
+        for (String check : handler.checks()) {
             if (checkRegistry.find(check).isEmpty()) {
                 throw new RegistrationException("Check '" + check + "' was referenced but is not registered");
             }
