@@ -456,6 +456,26 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
         }
     }
 
+    private void clearResumableSessionState() {
+        sessionId = null;
+        resumeGatewayUri = null;
+        sequence = -1;
+    }
+
+    private void cancelHeartbeat() {
+        ScheduledFuture<?> currentHeartbeatTask = heartbeatTask;
+        heartbeatTask = null;
+        if (currentHeartbeatTask != null) {
+            currentHeartbeatTask.cancel(true);
+        }
+    }
+
+    private void ensureOpen() {
+        if (closed.get()) {
+            throw new IllegalStateException("Gateway client is already closed");
+        }
+    }
+
     @FunctionalInterface
     public interface EventDeserializer<T> {
         T deserialize(JsonNode rawEvent, ObjectMapper objectMapper);
