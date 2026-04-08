@@ -153,62 +153,33 @@ public final class DiscordRestClient {
             try {
                 response = send(request);
             } catch (RuntimeException exception) {
-                if (attempt == retryPolicy.maxAttempts()) {
-                    throw exception;
+                if (handleTransportFailure(method, path, attempt, exception)) {
+                    continue;
                 }
-                Duration backoff = retryPolicy.delayForAttempt(attempt);
-                rateLimitObserver.onRetryScheduled(method, path, attempt, backoff, "transport");
-                sleep(backoff);
-                continue;
+                throw exception;
             }
 
-            String discoveredBucket = response.headers()
-                    .firstValue("X-RateLimit-Bucket")
-                    .orElse(null);
-
-            if (discoveredBucket != null && !discoveredBucket.isBlank()) {
-                routeToBucket.put(routeKey, discoveredBucket);
-                bucketId = discoveredBucket;
-            }
+            bucketId = updateRateLimitBucket(routeKey, bucketId, response);
 
             rateLimitManager.updateFromHeaders(bucketId, response.headers());
 
-            if (response.statusCode() == 429) {
-                JsonNode body = readJsonOrEmpty(response.body());
-                double retryAfterSeconds = rateLimitManager.updateFrom429(bucketId, body);
-                if (attempt < retryPolicy.maxAttempts()) {
-                    Duration backoff = Duration.ofMillis(Math.max(1L, Math.round(retryAfterSeconds * 1000)));
-                    rateLimitObserver.onRetryScheduled(method, path, attempt, backoff, "rate_limit");
-                    sleep(backoff);
-                    continue;
-                }
+            if (handleRateLimit429(method, path, bucketId, attempt, response)) {
+                continue;
             }
 
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                if (retryPolicy.shouldRetryStatus(response.statusCode()) && attempt < retryPolicy.maxAttempts()) {
+                if (shouldRetryHttpStatus(response.statusCode(), attempt)) {
                     Duration backoff = retryPolicy.delayForAttempt(attempt);
                     rateLimitObserver.onRetryScheduled(method, path, attempt, backoff, "http_" + response.statusCode());
                     sleep(backoff);
                     continue;
                 }
 
-                rateLimitObserver.onRequestCompleted(
-                        method,
-                        path,
-                        attempt,
-                        response.statusCode(),
-                        Duration.between(startedAt, Instant.now())
-                );
+                recordCompletion(method, path, attempt, response.statusCode(), startedAt);
                 throw new DiscordHttpException(response.statusCode(), response.body());
             }
 
-            rateLimitObserver.onRequestCompleted(
-                    method,
-                    path,
-                    attempt,
-                    response.statusCode(),
-                    Duration.between(startedAt, Instant.now())
-            );
+            recordCompletion(method, path, attempt, response.statusCode(), startedAt);
 
             if (response.body() == null || response.body().isBlank()) {
                 return objectMapper.createObjectNode();
@@ -218,6 +189,60 @@ public final class DiscordRestClient {
         }
 
         throw new IllegalStateException("Request attempts exhausted unexpectedly");
+    }
+
+    private boolean handleTransportFailure(String method, String path, int attempt, RuntimeException exception) {
+        if (attempt == retryPolicy.maxAttempts()) {
+            return false;
+        }
+        Duration backoff = retryPolicy.delayForAttempt(attempt);
+        rateLimitObserver.onRetryScheduled(method, path, attempt, backoff, "transport");
+        sleep(backoff);
+        return true;
+    }
+
+    private String updateRateLimitBucket(String routeKey, String currentBucketId, HttpResponse<String> response) {
+        String discoveredBucket = response.headers()
+                .firstValue("X-RateLimit-Bucket")
+                .orElse(null);
+
+        if (discoveredBucket == null || discoveredBucket.isBlank()) {
+            return currentBucketId;
+        }
+
+        routeToBucket.put(routeKey, discoveredBucket);
+        return discoveredBucket;
+    }
+
+    private boolean shouldRetryHttpStatus(int statusCode, int attempt) {
+        return retryPolicy.shouldRetryStatus(statusCode) && attempt < retryPolicy.maxAttempts();
+    }
+
+    private boolean handleRateLimit429(String method, String path, String bucketId, int attempt, HttpResponse<String> response) {
+        if (response.statusCode() != 429) {
+            return false;
+        }
+
+        JsonNode body = readJsonOrEmpty(response.body());
+        double retryAfterSeconds = rateLimitManager.updateFrom429(bucketId, body);
+        if (attempt >= retryPolicy.maxAttempts()) {
+            return false;
+        }
+
+        Duration backoff = Duration.ofMillis(Math.max(1L, Math.round(retryAfterSeconds * 1000)));
+        rateLimitObserver.onRetryScheduled(method, path, attempt, backoff, "rate_limit");
+        sleep(backoff);
+        return true;
+    }
+
+    private void recordCompletion(String method, String path, int attempt, int statusCode, Instant startedAt) {
+        rateLimitObserver.onRequestCompleted(
+                method,
+                path,
+                attempt,
+                statusCode,
+                Duration.between(startedAt, Instant.now())
+        );
     }
 
     private HttpRequest buildRequest(String method, String path, Object body) {
