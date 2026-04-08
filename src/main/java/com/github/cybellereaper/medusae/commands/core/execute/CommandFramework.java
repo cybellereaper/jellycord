@@ -1,5 +1,6 @@
 package com.github.cybellereaper.medusae.commands.core.execute;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.github.cybellereaper.medusae.commands.core.autocomplete.AutocompleteProvider;
 import com.github.cybellereaper.medusae.commands.core.autocomplete.AutocompleteRegistry;
 import com.github.cybellereaper.medusae.commands.core.check.CheckRegistry;
@@ -18,6 +19,7 @@ import com.github.cybellereaper.medusae.commands.core.parser.InteractionModulePa
 import com.github.cybellereaper.medusae.commands.core.registry.CommandRegistry;
 import com.github.cybellereaper.medusae.commands.core.registry.InteractionHandlerRegistry;
 import com.github.cybellereaper.medusae.commands.core.resolve.ParameterResolver;
+import com.github.cybellereaper.medusae.commands.core.resolve.ConversionSupport;
 import com.github.cybellereaper.medusae.commands.core.resolve.ResolverRegistry;
 import com.github.cybellereaper.medusae.commands.core.response.CommandResponse;
 import com.github.cybellereaper.medusae.commands.core.response.ImmediateResponse;
@@ -75,21 +77,7 @@ public final class CommandFramework {
     }
 
     private static Object convertString(String value, Class<?> type, String fieldName) {
-        try {
-            if (type == String.class) return value;
-            if (type == int.class || type == Integer.class) return Integer.parseInt(value);
-            if (type == long.class || type == Long.class) return Long.parseLong(value);
-            if (type == double.class || type == Double.class) return Double.parseDouble(value);
-            if (type == boolean.class || type == Boolean.class) return Boolean.parseBoolean(value);
-            if (type.isEnum()) {
-                @SuppressWarnings({"rawtypes", "unchecked"})
-                Object enumValue = Enum.valueOf((Class<? extends Enum>) type, value.toUpperCase());
-                return enumValue;
-            }
-        } catch (Exception exception) {
-            throw new ResolutionException("Failed to convert value '" + fieldName + "': " + value, exception);
-        }
-        throw new ResolutionException("Unsupported option type: " + type.getName());
+        return ConversionSupport.convertScalar(value, type, fieldName);
     }
 
     private static Object primitiveDefault(Class<?> primitiveType) {
@@ -364,6 +352,13 @@ public final class CommandFramework {
             Object resolvedValue = convertString(textValue, type, parameter.optionName());
             return parameter.wrappedOptional() ? Optional.of(resolvedValue) : resolvedValue;
         }
+        if (rawValue instanceof JsonNode node) {
+            if (type == String.class) return wrapOptional(parameter, ConversionSupport.parseString(node));
+            if (type == int.class || type == Integer.class) return wrapOptional(parameter, requireNonNullConverted(ConversionSupport.parseInt(node), parameter.optionName(), type));
+            if (type == long.class || type == Long.class) return wrapOptional(parameter, requireNonNullConverted(ConversionSupport.parseLong(node), parameter.optionName(), type));
+            if (type == double.class || type == Double.class) return wrapOptional(parameter, requireNonNullConverted(ConversionSupport.parseDouble(node), parameter.optionName(), type));
+            if (type == boolean.class || type == Boolean.class) return wrapOptional(parameter, requireNonNullConverted(ConversionSupport.parseBooleanStrict(node), parameter.optionName(), type));
+        }
         if (rawValue instanceof Number number) {
             if (type == int.class || type == Integer.class) return wrapOptional(parameter, number.intValue());
             if (type == long.class || type == Long.class) return wrapOptional(parameter, number.longValue());
@@ -372,6 +367,13 @@ public final class CommandFramework {
         if (rawValue instanceof Boolean booleanValue && (type == boolean.class || type == Boolean.class))
             return wrapOptional(parameter, booleanValue);
         throw new ResolutionException("Invalid option type for '" + parameter.optionName() + "'. Expected " + type.getSimpleName());
+    }
+
+    private Object requireNonNullConverted(Object converted, String optionName, Class<?> type) {
+        if (converted != null) {
+            return converted;
+        }
+        throw new ResolutionException("Invalid option type for '" + optionName + "'. Expected " + type.getSimpleName());
     }
 
     private void validateChecks(CommandDefinition definition) {
