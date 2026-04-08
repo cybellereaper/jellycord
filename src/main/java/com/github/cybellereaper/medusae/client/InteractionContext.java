@@ -1,6 +1,7 @@
 package com.github.cybellereaper.medusae.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.github.cybellereaper.medusae.commands.core.resolve.ConversionSupport;
 
 import java.util.List;
 import java.util.Map;
@@ -113,18 +114,7 @@ public final class InteractionContext {
         if (option == null) {
             return null;
         }
-        JsonNode value = option.path(VALUE_FIELD);
-        if (value.isIntegralNumber()) {
-            return value.longValue();
-        }
-        if (value.isTextual()) {
-            try {
-                return Long.parseLong(value.asText().trim());
-            } catch (NumberFormatException ignored) {
-                return null;
-            }
-        }
-        return null;
+        return ConversionSupport.parseLong(option.path(VALUE_FIELD));
     }
 
     public Integer optionInt(String optionName) {
@@ -140,20 +130,7 @@ public final class InteractionContext {
         if (option == null) {
             return null;
         }
-        JsonNode value = option.path(VALUE_FIELD);
-        if (value.isBoolean()) {
-            return value.booleanValue();
-        }
-        if (value.isTextual()) {
-            String text = value.asText().trim();
-            if ("true".equalsIgnoreCase(text)) {
-                return true;
-            }
-            if ("false".equalsIgnoreCase(text)) {
-                return false;
-            }
-        }
-        return null;
+        return ConversionSupport.parseBooleanStrict(option.path(VALUE_FIELD));
     }
 
     public Double optionDouble(String optionName) {
@@ -161,18 +138,7 @@ public final class InteractionContext {
         if (option == null) {
             return null;
         }
-        JsonNode value = option.path(VALUE_FIELD);
-        if (value.isNumber()) {
-            return value.doubleValue();
-        }
-        if (value.isTextual()) {
-            try {
-                return Double.parseDouble(value.asText().trim());
-            } catch (NumberFormatException ignored) {
-                return null;
-            }
-        }
-        return null;
+        return ConversionSupport.parseDouble(option.path(VALUE_FIELD));
     }
 
     public JsonNode resolvedAttachment(String attachmentId) {

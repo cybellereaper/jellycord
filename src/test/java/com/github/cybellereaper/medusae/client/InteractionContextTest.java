@@ -144,6 +144,33 @@ class InteractionContextTest {
     }
 
     @Test
+    void returnsNullForOutOfRangeAndBlankOptionValues() throws Exception {
+        JsonNode interaction = MAPPER.readTree("""
+                {
+                  "id": "56",
+                  "token": "abc",
+                  "type": 2,
+                  "data": {
+                    "name": "config",
+                    "options": [
+                      { "name": "too_big", "value": "2147483648" },
+                      { "name": "blank_num", "value": "   " },
+                      { "name": "blank_bool", "value": "   " }
+                    ]
+                  }
+                }
+                """);
+
+        InteractionContext context = InteractionContext.from(interaction, (id, token, type, data) -> {
+        });
+
+        assertNull(context.optionInt("too_big"));
+        assertNull(context.optionLong("blank_num"));
+        assertNull(context.optionDouble("blank_num"));
+        assertNull(context.optionBoolean("blank_bool"));
+    }
+
+    @Test
     void resolvesEntitiesFromResolvedInteractionData() throws Exception {
         JsonNode interaction = MAPPER.readTree("""
                 {

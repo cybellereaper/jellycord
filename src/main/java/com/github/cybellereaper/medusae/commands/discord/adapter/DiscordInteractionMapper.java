@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.cybellereaper.medusae.client.*;
 import com.github.cybellereaper.medusae.commands.core.model.*;
+import com.github.cybellereaper.medusae.commands.core.resolve.ConversionSupport;
 import com.github.cybellereaper.medusae.commands.discord.adapter.payload.DiscordInteractionPayload;
 import com.github.cybellereaper.medusae.commands.discord.adapter.payload.DiscordInteractionPayloadReader;
 import com.github.cybellereaper.medusae.commands.discord.adapter.payload.DiscordOptionType;
@@ -108,54 +109,19 @@ public final class DiscordInteractionMapper {
     }
 
     private static String parseEntityId(JsonNode rawValue) {
-        if (rawValue.isTextual()) {
-            String value = rawValue.asText().trim();
-            return value.isEmpty() ? null : value;
-        }
-        if (rawValue.isIntegralNumber()) {
-            return Long.toString(rawValue.longValue());
-        }
-        return null;
+        return ConversionSupport.normalizeEntityId(rawValue);
     }
 
     private static Long parseLong(JsonNode rawValue) {
-        if (rawValue.isIntegralNumber()) {
-            return rawValue.longValue();
-        }
-        if (rawValue.isTextual()) {
-            try {
-                return Long.parseLong(rawValue.asText().trim());
-            } catch (NumberFormatException ignored) {
-                return null;
-            }
-        }
-        return null;
+        return ConversionSupport.parseLong(rawValue);
     }
 
     private static Double parseDouble(JsonNode rawValue) {
-        if (rawValue.isNumber()) {
-            return rawValue.doubleValue();
-        }
-        if (rawValue.isTextual()) {
-            try {
-                return Double.parseDouble(rawValue.asText().trim());
-            } catch (NumberFormatException ignored) {
-                return null;
-            }
-        }
-        return null;
+        return ConversionSupport.parseDouble(rawValue);
     }
 
     private static Boolean parseBoolean(JsonNode rawValue) {
-        if (rawValue.isBoolean()) {
-            return rawValue.booleanValue();
-        }
-        if (rawValue.isTextual()) {
-            String text = rawValue.asText().trim();
-            if ("true".equalsIgnoreCase(text)) return true;
-            if ("false".equalsIgnoreCase(text)) return false;
-        }
-        return null;
+        return ConversionSupport.parseBooleanStrict(rawValue);
     }
 
     private static String textOrNull(String text) {
