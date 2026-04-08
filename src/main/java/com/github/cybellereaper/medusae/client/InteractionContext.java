@@ -1,6 +1,7 @@
 package com.github.cybellereaper.medusae.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.github.cybellereaper.medusae.commands.core.resolve.ConversionSupport;
 
 import java.util.List;
 import java.util.Objects;

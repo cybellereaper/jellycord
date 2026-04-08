@@ -242,4 +242,34 @@ class DiscordInteractionMapperTest {
         assertTrue(interaction.options().isEmpty());
         assertTrue(interaction.resolved().users().isEmpty());
     }
+
+    @Test
+    void normalizesEntityIdsAndReturnsNullForMalformedScalars() throws Exception {
+        DiscordInteractionMapper mapper = new DiscordInteractionMapper();
+        var node = JSON.readTree("""
+                {
+                  "id":"1",
+                  "token":"t",
+                  "type":2,
+                  "data":{
+                    "name":"normalize",
+                    "type":1,
+                    "options":[
+                      {"name":"user_from_number","type":6,"value":42},
+                      {"name":"blank_user","type":6,"value":"   "},
+                      {"name":"invalid_int","type":4,"value":"abc"},
+                      {"name":"invalid_bool","type":5,"value":"yes"},
+                      {"name":"null_number","type":10,"value":null}
+                    ]
+                  }
+                }
+                """);
+
+        var interaction = mapper.toCoreInteraction(node, InteractionContext.from(node, (id, token, type, data) -> {}));
+        assertEquals("42", interaction.options().get("user_from_number").value());
+        assertNull(interaction.options().get("blank_user").value());
+        assertNull(interaction.options().get("invalid_int").value());
+        assertNull(interaction.options().get("invalid_bool").value());
+        assertNull(interaction.options().get("null_number").value());
+    }
 }
