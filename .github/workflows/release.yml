@@ -16,21 +16,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK
-        uses: actions/setup-java@v4
+      - name: Set up Crystal
+        uses: crystal-lang/install-crystal@v1
         with:
-          distribution: temurin
-          java-version: '25'
-          cache: gradle
+          crystal: latest
+
+      - name: Install dependencies
+        run: shards install
 
       - name: Run tests
-        run: ./gradlew test
+        run: crystal spec
 
-      - name: Build artifacts
-        run: ./gradlew jar
+      - name: Build
+        run: shards build
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: build/libs/*.jar
           generate_release_notes: true
