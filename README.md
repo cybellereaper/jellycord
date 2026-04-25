@@ -82,18 +82,8 @@ bot = DemoBot.new(
   }
 )
 
-bot.handle_interaction(Medusae::Client::Interaction.new(
-  id: "1",
-  token: "abc",
-  type: Medusae::Client::InteractionType::ApplicationCommand,
-  data: Medusae::Client::InteractionData.new(name: "ping"),
-))
-bot.handle_interaction(Medusae::Client::Interaction.new(
-  id: "2",
-  token: "def",
-  type: Medusae::Client::InteractionType::MessageComponent,
-  data: Medusae::Client::InteractionData.new(custom_id: "confirm"),
-))
+bot.handle_interaction(Medusae::Client::Interaction.slash_command("ping", id: "1", token: "abc"))
+bot.handle_interaction(Medusae::Client::Interaction.component("confirm", id: "2", token: "def"))
 ```
 
 See runnable files in [`examples/`](examples).

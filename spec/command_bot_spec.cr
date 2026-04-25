@@ -33,12 +33,7 @@ describe Medusae::Client::CommandBot do
       responses << payload
     })
 
-    bot.handle_interaction(Medusae::Client::Interaction.new(
-      id: "1",
-      token: "abc",
-      type: Medusae::Client::InteractionType::ApplicationCommand,
-      data: Medusae::Client::InteractionData.new(name: "ping"),
-    ))
+    bot.handle_interaction(Medusae::Client::Interaction.slash_command("ping", id: "1", token: "abc"))
 
     bot.events.should eq(["slash:ping"])
     responses.size.should eq(1)
@@ -50,12 +45,7 @@ describe Medusae::Client::CommandBot do
   it "prefers exact component handlers over global handlers" do
     bot = MacroBotExample.new(->(_payload : Medusae::Client::InteractionResponse) { })
 
-    bot.handle_interaction(Medusae::Client::Interaction.new(
-      id: "1",
-      token: "abc",
-      type: Medusae::Client::InteractionType::MessageComponent,
-      data: Medusae::Client::InteractionData.new(custom_id: "confirm"),
-    ))
+    bot.handle_interaction(Medusae::Client::Interaction.component("confirm", id: "1", token: "abc"))
 
     bot.events.should eq(["component:confirm"])
   end
@@ -63,12 +53,7 @@ describe Medusae::Client::CommandBot do
   it "falls back to global component handlers" do
     bot = MacroBotExample.new(->(_payload : Medusae::Client::InteractionResponse) { })
 
-    bot.handle_interaction(Medusae::Client::Interaction.new(
-      id: "1",
-      token: "abc",
-      type: Medusae::Client::InteractionType::MessageComponent,
-      data: Medusae::Client::InteractionData.new(custom_id: "missing"),
-    ))
+    bot.handle_interaction(Medusae::Client::Interaction.component("missing", id: "1", token: "abc"))
 
     bot.events.should eq(["component:global"])
   end
@@ -76,12 +61,7 @@ describe Medusae::Client::CommandBot do
   it "supports autocomplete handlers defined with macros" do
     bot = MacroBotExample.new(->(_payload : Medusae::Client::InteractionResponse) { })
 
-    bot.handle_interaction(Medusae::Client::Interaction.new(
-      id: "1",
-      token: "abc",
-      type: Medusae::Client::InteractionType::ApplicationCommandAutocomplete,
-      data: Medusae::Client::InteractionData.new(name: "ping"),
-    ))
+    bot.handle_interaction(Medusae::Client::Interaction.autocomplete("ping", id: "1", token: "abc"))
 
     bot.events.should eq(["autocomplete:ping"])
   end

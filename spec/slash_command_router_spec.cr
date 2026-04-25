@@ -8,7 +8,7 @@ describe Medusae::Client::SlashCommandRouter do
       response << payload
     })
 
-    interaction = Medusae::Client::Interaction.new(id: "1", token: "abc", type: Medusae::Client::InteractionType::Ping)
+    interaction = Medusae::Client::Interaction.ping(id: "1", token: "abc")
     router.handle_interaction(interaction)
 
     response.size.should eq(1)
@@ -20,12 +20,7 @@ describe Medusae::Client::SlashCommandRouter do
     router = Medusae::Client::SlashCommandRouter.new(->(_payload : Medusae::Client::InteractionResponse) { })
     router.register_slash_handler("ping") { called = true }
 
-    interaction = Medusae::Client::Interaction.new(
-      id: "1",
-      token: "abc",
-      type: Medusae::Client::InteractionType::ApplicationCommand,
-      data: Medusae::Client::InteractionData.new(name: "ping"),
-    )
+    interaction = Medusae::Client::Interaction.slash_command("ping", id: "1", token: "abc")
     router.handle_interaction(interaction)
 
     called.should be_true
@@ -36,12 +31,7 @@ describe Medusae::Client::SlashCommandRouter do
     router = Medusae::Client::SlashCommandRouter.new(->(_payload : Medusae::Client::InteractionResponse) { })
     router.register_user_context_menu_handler("profile") { called = true }
 
-    interaction = Medusae::Client::Interaction.new(
-      id: "1",
-      token: "abc",
-      type: Medusae::Client::InteractionType::ApplicationCommand,
-      data: Medusae::Client::InteractionData.new(type: Medusae::Client::CommandType::UserContext, name: "profile"),
-    )
+    interaction = Medusae::Client::Interaction.user_context("profile", id: "1", token: "abc")
     router.handle_interaction(interaction)
 
     called.should be_true
@@ -52,12 +42,7 @@ describe Medusae::Client::SlashCommandRouter do
     router = Medusae::Client::SlashCommandRouter.new(->(_payload : Medusae::Client::InteractionResponse) { })
     router.register_message_context_menu_handler("quote") { called = true }
 
-    interaction = Medusae::Client::Interaction.new(
-      id: "1",
-      token: "abc",
-      type: Medusae::Client::InteractionType::ApplicationCommand,
-      data: Medusae::Client::InteractionData.new(type: Medusae::Client::CommandType::MessageContext, name: "quote"),
-    )
+    interaction = Medusae::Client::Interaction.message_context("quote", id: "1", token: "abc")
     router.handle_interaction(interaction)
 
     called.should be_true
@@ -68,12 +53,7 @@ describe Medusae::Client::SlashCommandRouter do
     router = Medusae::Client::SlashCommandRouter.new(->(_payload : Medusae::Client::InteractionResponse) { })
     router.register_component_handler("confirm") { called = true }
 
-    interaction = Medusae::Client::Interaction.new(
-      id: "1",
-      token: "abc",
-      type: Medusae::Client::InteractionType::MessageComponent,
-      data: Medusae::Client::InteractionData.new(custom_id: "  confirm  "),
-    )
+    interaction = Medusae::Client::Interaction.component("  confirm  ", id: "1", token: "abc")
     router.handle_interaction(interaction)
 
     called.should be_true
@@ -84,12 +64,7 @@ describe Medusae::Client::SlashCommandRouter do
     router = Medusae::Client::SlashCommandRouter.new(->(_payload : Medusae::Client::InteractionResponse) { })
     router.register_global_component_handler { called = true }
 
-    interaction = Medusae::Client::Interaction.new(
-      id: "1",
-      token: "abc",
-      type: Medusae::Client::InteractionType::MessageComponent,
-      data: Medusae::Client::InteractionData.new(custom_id: "unknown"),
-    )
+    interaction = Medusae::Client::Interaction.component("unknown", id: "1", token: "abc")
     router.handle_interaction(interaction)
 
     called.should be_true
@@ -106,7 +81,7 @@ describe Medusae::Client::SlashCommandRouter do
 
   it "requires interaction id and token when responding" do
     router = Medusae::Client::SlashCommandRouter.new(->(_payload : Medusae::Client::InteractionResponse) { })
-    interaction = Medusae::Client::Interaction.new(type: Medusae::Client::InteractionType::Ping)
+    interaction = Medusae::Client::Interaction.ping
 
     expect_raises(ArgumentError, /id and token/) do
       router.handle_interaction(interaction)
